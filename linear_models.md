@@ -21113,3 +21113,340 @@ broom::tidy(fit) |>
 | Borough: Brooklyn |  -49.754 |   0.000 |
 | Borough: Queens   |  -77.048 |   0.000 |
 | Borough: Bronx    |  -90.254 |   0.000 |
+
+## Diagnostics
+
+diagnostics is basically “look at the residuals”
+
+``` r
+modelr::add_residuals(nyc_airbnb, fit)
+```
+
+    ## # A tibble: 40,492 × 6
+    ##    price stars borough neighborhood room_type        resid
+    ##    <dbl> <dbl> <chr>   <chr>        <chr>            <dbl>
+    ##  1    99   5   Bronx   City Island  Private room      9.47
+    ##  2   200  NA   Bronx   City Island  Private room     NA   
+    ##  3   300  NA   Bronx   City Island  Entire home/apt  NA   
+    ##  4   125   5   Bronx   City Island  Entire home/apt  35.5 
+    ##  5    69   5   Bronx   City Island  Private room    -20.5 
+    ##  6   125   5   Bronx   City Island  Entire home/apt  35.5 
+    ##  7    85   5   Bronx   City Island  Entire home/apt  -4.53
+    ##  8    39   4.5 Bronx   Allerton     Private room    -34.5 
+    ##  9    95   5   Bronx   Allerton     Entire home/apt   5.47
+    ## 10   125   4.5 Bronx   Allerton     Entire home/apt  51.5 
+    ## # ℹ 40,482 more rows
+
+so we can look at residuals
+
+``` r
+nyc_airbnb |> 
+  modelr::add_residuals(fit) |> 
+  ggplot(aes(x = stars, y = resid)) + 
+  geom_point()
+```
+
+    ## Warning: Removed 9962 rows containing missing values or values outside the scale range
+    ## (`geom_point()`).
+
+![](linear_models_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+
+Residual distribution is skewed and not constant skewed! Low residual
+variance for low stars but very skewed and more spread in 5 stars.
+
+``` r
+nyc_airbnb |> 
+  modelr::add_residuals(fit) |> 
+  ggplot(aes(x = borough, y = resid)) + 
+  geom_violin()
+```
+
+    ## Warning: Removed 9962 rows containing non-finite outside the scale range
+    ## (`stat_ydensity()`).
+
+![](linear_models_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+
+Definite skew distributions. There’s a lot concentrated near 0 but long
+tails with Brooklyn and Manhattan.
+
+Do we trust the 95% CI and p-values for coefficients that come out of
+this linear regression? Probably no.
+
+## Hypothesis testing
+
+Individual hypothesis testing is easy—just get the p-values here:
+
+``` r
+broom::tidy(fit) |> 
+  mutate(term = str_replace(term, "borough", "Borough: ")) |> 
+  knitr::kable(digits = 3)
+```
+
+| term              | estimate | std.error | statistic | p.value |
+|:------------------|---------:|----------:|----------:|--------:|
+| (Intercept)       |   19.839 |    12.189 |     1.628 |   0.104 |
+| stars             |   31.990 |     2.527 |    12.657 |   0.000 |
+| Borough: Brooklyn |  -49.754 |     2.235 |   -22.262 |   0.000 |
+| Borough: Queens   |  -77.048 |     3.727 |   -20.675 |   0.000 |
+| Borough: Bronx    |  -90.254 |     8.567 |   -10.534 |   0.000 |
+
+I still wouldn’t trust it because the underlying assumptions regarding
+residuals is not met.
+
+Is borough as a categorical variable significant?
+
+Try testing nested models:
+
+``` r
+fit_null = lm(price ~ stars, data = nyc_airbnb)
+fit_alt = lm(price ~ stars + borough, data = nyc_airbnb)
+
+anova(fit_null, fit_alt)
+```
+
+    ## Analysis of Variance Table
+    ## 
+    ## Model 1: price ~ stars
+    ## Model 2: price ~ stars + borough
+    ##   Res.Df        RSS Df Sum of Sq      F    Pr(>F)    
+    ## 1  30528 1030861841                                  
+    ## 2  30525 1005601724  3  25260117 255.59 < 2.2e-16 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+ANOVA function constructs the F test to compare these two models. F =
+255.59 and p-value is really small, so borough matters!
+
+## Nesting data
+
+Nest data first, then fit models to each thing separately. Like
+stratification! Try a more complicated modeL:
+
+Now we’re doing `stars * borough` which is asking if there’s an
+interaction. Same with `roomt_type * borough`.
+
+``` r
+nyc_airbnb |> 
+  lm(price ~ stars * borough + room_type * borough, data = _) |> 
+  broom::tidy() |> 
+  knitr::kable(digits = 3)
+```
+
+| term                                   | estimate | std.error | statistic | p.value |
+|:---------------------------------------|---------:|----------:|----------:|--------:|
+| (Intercept)                            |   90.067 |    75.406 |     1.194 |   0.232 |
+| stars                                  |    4.446 |    16.633 |     0.267 |   0.789 |
+| boroughBrooklyn                        |  -20.439 |    77.117 |    -0.265 |   0.791 |
+| boroughManhattan                       |    5.627 |    77.808 |     0.072 |   0.942 |
+| boroughQueens                          |    1.509 |    83.501 |     0.018 |   0.986 |
+| room_typePrivate room                  |  -52.915 |    17.751 |    -2.981 |   0.003 |
+| room_typeShared room                   |  -70.547 |    41.551 |    -1.698 |   0.090 |
+| stars:boroughBrooklyn                  |   16.525 |    16.982 |     0.973 |   0.331 |
+| stars:boroughManhattan                 |   22.664 |    17.099 |     1.325 |   0.185 |
+| stars:boroughQueens                    |    5.208 |    18.272 |     0.285 |   0.776 |
+| boroughBrooklyn:room_typePrivate room  |  -39.308 |    18.024 |    -2.181 |   0.029 |
+| boroughManhattan:room_typePrivate room |  -71.273 |    18.002 |    -3.959 |   0.000 |
+| boroughQueens:room_typePrivate room    |  -16.341 |    19.020 |    -0.859 |   0.390 |
+| boroughBrooklyn:room_typeShared room   |  -35.292 |    42.942 |    -0.822 |   0.411 |
+| boroughManhattan:room_typeShared room  |  -83.089 |    42.451 |    -1.957 |   0.050 |
+| boroughQueens:room_typeShared room     |  -24.427 |    44.399 |    -0.550 |   0.582 |
+
+What is the effect of shared room vs. entire apartment in Manhattan?
+It’s kind of a hassle to do this right now. In just Manhattan:
+
+``` r
+nyc_airbnb |> 
+  filter(borough == "Manhattan") |> 
+  lm(price ~ stars + room_type, data = _) |> 
+  broom::tidy()
+```
+
+    ## # A tibble: 4 × 5
+    ##   term                  estimate std.error statistic   p.value
+    ##   <chr>                    <dbl>     <dbl>     <dbl>     <dbl>
+    ## 1 (Intercept)               95.7     22.2       4.31 1.62e-  5
+    ## 2 stars                     27.1      4.59      5.91 3.45e-  9
+    ## 3 room_typePrivate room   -124.       3.46    -35.8  9.40e-270
+    ## 4 room_typeShared room    -154.      10.1     -15.3  2.47e- 52
+
+We want to see it for each borough. We can copy and paste it over and
+over and change the borough each time…or we can use iteration!
+
+``` r
+nyc_airbnb |> 
+  nest(datasets = -borough)
+```
+
+    ## # A tibble: 4 × 2
+    ##   borough   datasets             
+    ##   <chr>     <list>               
+    ## 1 Bronx     <tibble [649 × 4]>   
+    ## 2 Queens    <tibble [3,821 × 4]> 
+    ## 3 Brooklyn  <tibble [16,810 × 4]>
+    ## 4 Manhattan <tibble [19,212 × 4]>
+
+Nested the datasets into each borough!!
+
+Create the airbnb lm function+
+
+``` r
+airbnb_lm = function(data) {
+  
+  lm(price ~ stars + room_type, data = data)
+  
+}
+```
+
+Back to fitting the function here. Map it across the datasets, use the
+airbnb_lm function and plug the datasets into the function, and fit the
+linear modles for each of the items in `datasets`!!
+
+``` r
+nyc_airbnb |> 
+  nest(datasets = -borough) |> 
+  mutate(fits = map(datasets, airbnb_lm),
+         results = map(fits, broom::tidy)) |> 
+  pull(results)
+```
+
+    ## [[1]]
+    ## # A tibble: 4 × 5
+    ##   term                  estimate std.error statistic  p.value
+    ##   <chr>                    <dbl>     <dbl>     <dbl>    <dbl>
+    ## 1 (Intercept)              90.1      15.2       5.94 5.73e- 9
+    ## 2 stars                     4.45      3.35      1.33 1.85e- 1
+    ## 3 room_typePrivate room   -52.9       3.57    -14.8  6.21e-41
+    ## 4 room_typeShared room    -70.5       8.36     -8.44 4.16e-16
+    ## 
+    ## [[2]]
+    ## # A tibble: 4 × 5
+    ##   term                  estimate std.error statistic  p.value
+    ##   <chr>                    <dbl>     <dbl>     <dbl>    <dbl>
+    ## 1 (Intercept)              91.6      25.8       3.54 4.00e- 4
+    ## 2 stars                     9.65      5.45      1.77 7.65e- 2
+    ## 3 room_typePrivate room   -69.3       4.92    -14.1  1.48e-43
+    ## 4 room_typeShared room    -95.0      11.3      -8.43 5.52e-17
+    ## 
+    ## [[3]]
+    ## # A tibble: 4 × 5
+    ##   term                  estimate std.error statistic   p.value
+    ##   <chr>                    <dbl>     <dbl>     <dbl>     <dbl>
+    ## 1 (Intercept)               69.6     14.0       4.96 7.27e-  7
+    ## 2 stars                     21.0      2.98      7.05 1.90e- 12
+    ## 3 room_typePrivate room    -92.2      2.72    -34.0  6.40e-242
+    ## 4 room_typeShared room    -106.       9.43    -11.2  4.15e- 29
+    ## 
+    ## [[4]]
+    ## # A tibble: 4 × 5
+    ##   term                  estimate std.error statistic   p.value
+    ##   <chr>                    <dbl>     <dbl>     <dbl>     <dbl>
+    ## 1 (Intercept)               95.7     22.2       4.31 1.62e-  5
+    ## 2 stars                     27.1      4.59      5.91 3.45e-  9
+    ## 3 room_typePrivate room   -124.       3.46    -35.8  9.40e-270
+    ## 4 room_typeShared room    -154.      10.1     -15.3  2.47e- 52
+
+Now we have 4 linear models associated with it, and tidied up the
+results of each of those lm fits in a column called `results`. Pulling
+the results out gives us the dataframes for each borough!
+
+We only care about borough and parameter results:
+
+``` r
+nyc_airbnb |> 
+  nest(datasets = -borough) |> 
+  mutate(fits = map(datasets, airbnb_lm),
+         results = map(fits, broom::tidy)) |> 
+  select(-datasets, -fits) |> 
+  unnest(results) |> 
+  select(borough, term, estimate) |> 
+  pivot_wider(
+    names_from = term,
+    values_from = estimate
+  )
+```
+
+    ## # A tibble: 4 × 5
+    ##   borough   `(Intercept)` stars `room_typePrivate room` `room_typeShared room`
+    ##   <chr>             <dbl> <dbl>                   <dbl>                  <dbl>
+    ## 1 Bronx              90.1  4.45                   -52.9                  -70.5
+    ## 2 Queens             91.6  9.65                   -69.3                  -95.0
+    ## 3 Brooklyn           69.6 21.0                    -92.2                 -106. 
+    ## 4 Manhattan          95.7 27.1                   -124.                  -154.
+
+This is easier to read! You can see the effect of stars is strongest in
+Manhattan and weakest in the Bronx.
+
+If you wanted to compare effects of stars across boroughs, you can’t
+nest. You would need to do the interaction term `stars * borough` as a
+test to see if the interaction term is significant.
+
+Tidyverse gives you a way to create an anonymous function. This is
+shorthand to create this little function `\(data)` which is the same as
+`airbnb_lm`.
+
+``` r
+nyc_airbnb |> 
+  nest(datasets = -borough) |> 
+  mutate(fits = map(datasets, \(data) lm(price ~ stars + room_type, data = data)),
+         results = map(fits, broom::tidy)) |> 
+  select(-datasets, -fits) |> 
+  unnest(results) |> 
+  select(borough, term, estimate) |> 
+  pivot_wider(
+    names_from = term,
+    values_from = estimate
+  )
+```
+
+    ## # A tibble: 4 × 5
+    ##   borough   `(Intercept)` stars `room_typePrivate room` `room_typeShared room`
+    ##   <chr>             <dbl> <dbl>                   <dbl>                  <dbl>
+    ## 1 Bronx              90.1  4.45                   -52.9                  -70.5
+    ## 2 Queens             91.6  9.65                   -69.3                  -95.0
+    ## 3 Brooklyn           69.6 21.0                    -92.2                 -106. 
+    ## 4 Manhattan          95.7 27.1                   -124.                  -154.
+
+``` r
+nyc_airbnb |> 
+  filter(borough == "Manhattan") |> 
+  nest(datasets = -neighborhood)
+```
+
+    ## # A tibble: 32 × 2
+    ##    neighborhood       datasets            
+    ##    <chr>              <list>              
+    ##  1 Battery Park City  <tibble [65 × 4]>   
+    ##  2 Chinatown          <tibble [360 × 4]>  
+    ##  3 Chelsea            <tibble [1,072 × 4]>
+    ##  4 Civic Center       <tibble [42 × 4]>   
+    ##  5 East Harlem        <tibble [1,048 × 4]>
+    ##  6 East Village       <tibble [1,858 × 4]>
+    ##  7 Financial District <tibble [391 × 4]>  
+    ##  8 Flatiron District  <tibble [90 × 4]>   
+    ##  9 Gramercy           <tibble [307 × 4]>  
+    ## 10 Greenwich Village  <tibble [383 × 4]>  
+    ## # ℹ 22 more rows
+
+We have 32 neighborhoods!! Each with each dataset with airbnbs Fit a
+model for each of them:
+
+``` r
+nyc_airbnb |> 
+  filter(borough == "Manhattan") |> 
+  nest(datasets = -neighborhood) |> 
+  mutate(fits = map(datasets, \(df) lm(price ~ stars + room_type, data = df)),
+         results = map(fits, broom::tidy)
+  ) |> 
+  select(neighborhood, results) |> 
+  unnest(results) |> 
+  filter(term == "room_typePrivate room") |> 
+  ggplot(aes(x = neighborhood, y = estimate)) +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 80, hjust = 1))
+```
+
+![](linear_models_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+
+We see some `4 x 5` and `3 x 5` before unnesting. Seems like one of the
+factor levels for room type is dropping in some areas like Civic Center
+because it doesn’t exist.
