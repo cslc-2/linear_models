@@ -21450,3 +21450,51 @@ nyc_airbnb |>
 We see some `4 x 5` and `3 x 5` before unnesting. Seems like one of the
 factor levels for room type is dropping in some areas like Civic Center
 because it doesn’t exist.
+
+## Logistic regression!
+
+import the WP homicide data:
+
+``` r
+baltimore_df = 
+  read_csv("data/homicide-data.csv") |> 
+  filter(city == "Baltimore") |> 
+  mutate(
+    resolved = as.numeric(disposition == "Closed by arrest"),
+    victim_age = as.numeric(victim_age)
+    )
+```
+
+    ## Rows: 52179 Columns: 12
+    ## ── Column specification ────────────────────────────────────────────────────────
+    ## Delimiter: ","
+    ## chr (9): uid, victim_last, victim_first, victim_race, victim_age, victim_sex...
+    ## dbl (3): reported_date, lat, lon
+    ## 
+    ## ℹ Use `spec()` to retrieve the full column specification for this data.
+    ## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+
+Change the reference category for victim_race and then fit the logistic
+regression:
+
+``` r
+fit_logistic =
+  baltimore_df |> 
+  mutate(victim_race = fct_infreq(victim_race)) |> 
+  glm(resolved ~ victim_age + victim_race, data = _, family = binomial())
+
+fit_logistic |> 
+  broom::tidy() |>
+  mutate(OR = exp(estimate)) |> 
+  select(term, OR, estimate, p.value) |> 
+  knitr::kable(digits = 3)
+```
+
+| term                |    OR | estimate | p.value |
+|:--------------------|------:|---------:|--------:|
+| (Intercept)         | 0.612 |   -0.491 |   0.000 |
+| victim_age          | 0.994 |   -0.006 |   0.059 |
+| victim_raceWhite    | 2.791 |    1.026 |   0.000 |
+| victim_raceHispanic | 1.780 |    0.577 |   0.032 |
+| victim_raceAsian    | 3.557 |    1.269 |   0.044 |
+| victim_raceOther    | 0.998 |   -0.002 |   0.998 |

@@ -262,6 +262,36 @@ nyc_airbnb |>
 We see some `4 x 5` and `3 x 5` before unnesting. Seems like one of the factor levels for room type is dropping in some areas like Civic Center because it doesn't exist. 
 
 
+## Logistic regression!
+
+import the WP homicide data:
+
+```{r}
+baltimore_df = 
+  read_csv("data/homicide-data.csv") |> 
+  filter(city == "Baltimore") |> 
+  mutate(
+    resolved = as.numeric(disposition == "Closed by arrest"),
+    victim_age = as.numeric(victim_age)
+    )
+```
+
+Change the reference category for victim_race and then fit the logistic regression:
+
+```{r}
+fit_logistic =
+  baltimore_df |> 
+  mutate(victim_race = fct_infreq(victim_race)) |> 
+  glm(resolved ~ victim_age + victim_race, data = _, family = binomial())
+
+fit_logistic |> 
+  broom::tidy() |>
+  mutate(OR = exp(estimate)) |> 
+  select(term, OR, estimate, p.value) |> 
+  knitr::kable(digits = 3)
+```
+
+
 
 
 
