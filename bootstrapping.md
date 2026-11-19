@@ -250,3 +250,75 @@ boot_straps_c =
   sim_df_const |> 
   modelr::bootstrap(n = 1000)
 ```
+
+## Airbnb
+
+``` r
+data("nyc_airbnb")
+
+nyc_airbnb =
+  nyc_airbnb |> 
+  mutate(stars = review_scores_location / 2) |> 
+  rename(
+    borough = neighbourhood_group,
+    neighborhood = neighbourhood) |> 
+  filter(borough != "Staten Island") |> 
+  drop_na(price, stars) |> 
+  select(price, stars, borough, neighborhood, room_type)
+```
+
+This doesn’t look good ..
+
+``` r
+nyc_airbnb |> 
+  ggplot(aes(x = stars, y = price, color = room_type)) +
+  geom_point()
+```
+
+![](bootstrapping_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+
+Boot strap!!
+
+``` r
+airbnb_bootstrap_df =
+  nyc_airbnb |> 
+  filter(borough == "Manhattan") |> 
+  modelr::bootstrap(n = 1000) |> 
+  mutate(
+    model_fits = map(strap, \(df) lm(price ~ stars + room_type, data = df)),
+    results = map(model_fits, broom::tidy)
+  )
+```
+
+are these coefficients close enough to normal that I can trust default
+inference?
+
+``` r
+airbnb_bootstrap_df |> 
+  select(results) |> 
+  unnest(results) |> 
+  filter(term == "stars") |> 
+  ggplot(aes(x = estimate)) +
+  geom_density()
+```
+
+![](bootstrapping_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+
+CI for stars slope
+
+``` r
+airbnb_bootstrap_df |> 
+  select(results) |> 
+  unnest(results) |> 
+  filter(term == "stars") |>
+  summarize(
+    slope_estimate = mean(estimate),
+    ci_lb = quantile(estimate, 0.025),
+    ci_ub = quantile(estimate, 0.975)
+  )
+```
+
+    ## # A tibble: 1 × 3
+    ##   slope_estimate ci_lb ci_ub
+    ##            <dbl> <dbl> <dbl>
+    ## 1           27.0  12.6  37.5
