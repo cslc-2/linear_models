@@ -86,7 +86,10 @@ Use Nice Tools
 cv_df =
   crossv_mc(lidar_df, 100)   # 100 random 80/20 training/testing splits ("Monte Carlo" cross-validation)
 
-cv_df |> pull(train) |> nth(2) |> as_tibble()    # inspect the 2nd training set. Splits are stored as "resample" objects (lists of row
+cv_df |> 
+  pull(train) |> 
+  nth(2) |> 
+  as_tibble()    # inspect the 2nd training set. Splits are stored as "resample" objects (lists of row
                                                  # numbers, to save memory); as_tibble() turns one back into a regular dataframe
 ```
 
